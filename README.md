@@ -1,9 +1,7 @@
-# Machine-Learning-Final-Project
 
 
+## Task Description
 
-# Task Description
 
-
-# Our Approach
+## Our Approach
 
