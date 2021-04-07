@@ -1,0 +1,57 @@
+---
+title: "credit scoring"
+author: "ST310"
+date: "07/04/2021"
+output: pdf_document
+---
+
+# I. Data Pre-processing
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(randomForest)
+library(tree)
+library(dplyr)
+```
+
+## 1. Response Variable
+
+- industry practice: credit card users who defaulted and do not repay within 3 months would be sued (?). 
+
+```{r}
+credit.dat <- read.csv("credit_record.csv")
+application.dat <- read.csv("application_record.csv")
+
+# remove those whose acount history is less than 3 months
+credit.1 <- credit.dat %>%
+  group_by(ID) %>%
+  mutate(min_month=min(MONTHS_BALANCE)) %>%
+  filter(min_month < -2)
+
+# label 1 for those have ever been three or more months overdue
+positive_label <- credit.dat %>%
+  filter(STATUS == 3 | STATUS == 4 |STATUS == 5) %>%
+  distinct(ID) %>%
+  mutate(label = 1)
+
+credit.label <- full_join(credit.1, positive_label, by="ID")
+
+# label 0 for those who are not 1
+negative_label <- credit.label %>%
+  filter(is.na(label)) %>%
+  mutate(label = 0) %>%
+  select(ID, label)
+
+# create a dataframe with id and their label
+id_label <- rbind(positive_label, negative_label) %>%
+  distinct(ID, label)
+
+# merge table
+card.dat <- inner_join(application.dat, id_label, by="ID")
+
+# columns with "characters"
+cols <- c("CODE_GENDER", "FLAG_OWN_CAR", "FLAG_OWN_REALTY", "NAME_INCOME_TYPE", "NAME_EDUCATION_TYPE", "NAME_FAMILY_STATUS", "NAME_HOUSING_TYPE", "FLAG_MOBIL", "FLAG_WORK_PHONE", "FLAG_PHONE", "FLAG_EMAIL", "OCCUPATION_TYPE", "label")
+# coerce these variables to factors
+card.dat[cols] <- lapply(card.dat[cols], factor)
+summary(card.dat)
+```
