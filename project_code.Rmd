@@ -9,9 +9,8 @@ output: pdf_document
 
 ```{r setup, include=FALSE}
 library(ggplot2)
-library(randomForest)
-library(tree)
-library(dplyr)
+library(tidymodels)
+library(Information)
 ```
 
 ## 1. Response Variable
@@ -50,8 +49,160 @@ id_label <- rbind(positive_label, negative_label) %>%
 card.dat <- inner_join(application.dat, id_label, by="ID")
 
 # columns with "characters"
-cols <- c("CODE_GENDER", "FLAG_OWN_CAR", "FLAG_OWN_REALTY", "NAME_INCOME_TYPE", "NAME_EDUCATION_TYPE", "NAME_FAMILY_STATUS", "NAME_HOUSING_TYPE", "FLAG_MOBIL", "FLAG_WORK_PHONE", "FLAG_PHONE", "FLAG_EMAIL", "OCCUPATION_TYPE", "label")
+cols <- c("CODE_GENDER", "FLAG_OWN_CAR", "FLAG_OWN_REALTY", "NAME_INCOME_TYPE",
+          "NAME_EDUCATION_TYPE", "NAME_FAMILY_STATUS", "NAME_HOUSING_TYPE", "FLAG_MOBIL", 
+          "FLAG_WORK_PHONE", "FLAG_PHONE", "FLAG_EMAIL", "OCCUPATION_TYPE", "label")
 # coerce these variables to factors
 card.dat[cols] <- lapply(card.dat[cols], factor)
 summary(card.dat)
 ```
+
+## 2. Continuous Variable
+
+```{r}
+#Converting Birthday and Employed day to year
+card.dat$age <- ifelse(card.dat$DAYS_BIRTH != 365243, -card.dat$DAYS_BIRTH%/%365, -1)
+card.dat$years_employed <- ifelse(card.dat$DAYS_EMPLOYED != 365243,
+                                  round(-card.dat$DAYS_EMPLOYED/365, digits=2), 0)
+summary(card.dat$years_employed)
+#Removing FLAG_MOBIL because it has only 1 unique value"
+card.dat <- card.dat %>% select(-"FLAG_MOBIL")
+```
+
+## 3. Categorical Variables
+
+```{r}
+# NAME_INCOME_TYPE
+table(card.dat$NAME_INCOME_TYPE, card.dat$label)
+```
+
+There are only 11 observations for "Student". We decided to combine this level with "Pensioner" because people from both classes are outside of the working force. 
+
+```{r}
+levels(card.dat$NAME_INCOME_TYPE) <- c("Commercial associate", "Pensioner&Student",
+                                       "State servant", "Pensioner&Student", "Working")
+```
+
+```{r}
+# NAME_EDUCATION_TYPE
+table(card.dat$NAME_EDUCATION_TYPE, card.dat$label)
+```
+
+There are only 31 observations for "Academic degree". We decided to merge this level with "Higher education" because they both indicated an educational level that is higher than secondary education.
+
+```{r}
+levels(card.dat$NAME_EDUCATION_TYPE) <- c("Higher education", "Higher education", 
+                                          "Incomplete higher", "Lower secondary", "Secondary / secondary special")
+```
+
+```{r}
+# NAME_FAMILY_STATUS
+table(card.dat$NAME_FAMILY_STATUS, card.dat$label)
+
+# NAME_HOUSING_TYPE
+table(card.dat$NAME_HOUSING_TYPE, card.dat$label)
+```
+
+```{r}
+# OCCUPATION_TYPE
+# Distribution of years of employment for people who do not specify occupation type
+card.dat %>%
+  filter(OCCUPATION_TYPE == "") %>%
+  group_by(group = cut(years_employed, 
+                       breaks = c(-0.001, 0, 10, 20, 30, round(max(years_employed))),
+                       include.lowest = FALSE)) %>%
+  count() %>%
+  rename(Years_Employed=group, Number_of_People=n)
+```
+
+We observe that for those who leave "OCCUPATION_TYPE" empty have varying years of employment. For people who leave OCCUPATION_TYPE blank, if they also have 0 days of employment, we infer that they are unemployed, otherwise they are classified are "unknown".
+
+For the other levels, we decide to merge them according to the skill levels required for the position. 
+
+```{r}
+card.dat <- card.dat %>%
+  mutate(occupation = as.factor(case_when(
+    # create level unemployed and unknown for occupation type
+    OCCUPATION_TYPE=="" & years_employed==0 ~ "Unemployed",
+    OCCUPATION_TYPE=="" & years_employed>0 ~ "Unknown",
+    # recode other levels to "HighSkill" and "LowSkill"
+    OCCUPATION_TYPE %in% c("Accountants", "Core Staff", "High skill tech staff", 
+                           "HR staff", "IT staff", "Managers", "Medicine staff") ~ "HighSkill",
+    TRUE ~ "LowSkill"
+  )))
+```
+
+
+## N. WOE
+
+```{r}
+# split data into training and testing
+samplesize <- floor(0.75*nrow(card.dat))
+card.dat$label <- as.numeric(as.factor(card.dat$label)) - 1
+set.seed(1)
+train_ind=sample(seq_len(nrow(card.dat)), samplesize) # 75% rows as training data
+train <- card.dat[train_ind, ]
+test <- card.dat[-train_ind, ]
+```
+
+
+```{r cars}
+IV <- create_infotables(data=train,
+                        valid=test,
+                        y="label",
+                        bins=10)
+
+valid=card.dat[-train,] # testing data ##?
+train <- subset(train, "label"==1)
+valid <- subset(valid, "label"==1)
+options(scipen=10)
+IV <- create_infotables(data=train,
+valid=valid,
+y="label",
+parallel=FALSE)
+
+# "Variable FLAG_MOBIL was removed because it has only 1 unique value"
+
+```
+
+### (1) Including Plots
+
+You can also embed plots, for example:
+
+```{r}
+
+knitr::kable(head(IV$Summary))
+
+#The IV$Tables object returned by Information is simply a list of dataframes that contains the WOE tables for all variables in the input dataset. Note that the penalty and IV columns are cumulative.
+
+knitr::kable(IV$Tables$AMT_INCOME_TOTAL)
+
+```
+
+```{r}
+
+#Plotting WOE Patterns
+plot_infotables(IV, "AMT_INCOME_TOTAL", show_values=TRUE)
+
+```
+
+```{R}
+plot_infotables(IV, IV$Summary$Variable[1:6], same_scales=TRUE)
+
+```
+
+```{R}
+# Get the names and loop through to create individual plots
+names <- names(IV$Tables)
+plots <- list()
+for (i in 1:length(names)){
+plots[[i]] <- plot_infotables(IV, names[i])
+}
+
+# Showing the top variables
+
+plots[1:6]
+
+```
+
+
