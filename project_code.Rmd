@@ -8,9 +8,12 @@ output: pdf_document
 # I. Data Pre-processing
 
 ```{r setup, include=FALSE}
-library(ggplot2)
 library(tidymodels)
+library(baguette)
 library(Information)
+library(ROCR)
+library(caret)
+library(vip)
 ```
 
 ## 1. Response Variable
@@ -59,32 +62,61 @@ summary(card.dat)
 
 ## 2. Continuous Variable
 
+### (1) DAYS_BIRTH, DAYS_EMPLOYED
+
 ```{r}
 #Converting Birthday and Employed day to year
 card.dat$age <- ifelse(card.dat$DAYS_BIRTH != 365243, -card.dat$DAYS_BIRTH%/%365, -1)
 card.dat$years_employed <- ifelse(card.dat$DAYS_EMPLOYED != 365243,
                                   round(-card.dat$DAYS_EMPLOYED/365, digits=2), 0)
-summary(card.dat$years_employed)
+```
+
+### (2) FLAG_MOBIL
+
+```{r}
 #Removing FLAG_MOBIL because it has only 1 unique value"
-card.dat <- card.dat %>% select(-"FLAG_MOBIL")
+card.dat <- card.dat %>% select(-FLAG_MOBIL)
+```
+
+### (3) CNT_CHILDREN, CNT_FAM_MEMBERS 
+
+```{r}
+# correlation between CNT_CHILDREN and CNT_FAM_MEMBERS
+ggplot(data=card.dat, aes(x=CNT_CHILDREN, y=CNT_FAM_MEMBERS)) + 
+  stat_sum(aes(size = factor(..n..)), geom = "point") + scale_size_discrete(name = "Count")
+```
+
+Due to the strong correlation, we decide to exclude CNT_CHILDREN from our future models. Also, we transform CNT_FAM_MEMBERS. ||||| justification
+
+```{r}
+card.dat <- card.dat %>% select(-CNT_CHILDREN)
+
+card.dat$CNT_FAM_MEMBERS[card.dat$CNT_FAM_MEMBERS >= 4] <-"4+"
+card.dat$CNT_FAM_MEMBERS[card.dat$CNT_FAM_MEMBERS == 1] <- "1"
+card.dat$CNT_FAM_MEMBERS[card.dat$CNT_FAM_MEMBERS == 2] <- "2"
+card.dat$CNT_FAM_MEMBERS[card.dat$CNT_FAM_MEMBERS == 3] <- "3"
+
+card.dat$CNT_FAM_MEMBERS <- as.factor(card.dat$CNT_FAM_MEMBERS)
 ```
 
 ## 3. Categorical Variables
 
+### (1) NAME_INCOME_TYPE
+
 ```{r}
-# NAME_INCOME_TYPE
 table(card.dat$NAME_INCOME_TYPE, card.dat$label)
 ```
 
-There are only 11 observations for "Student". We decided to combine this level with "Pensioner" because people from both classes are outside of the working force. 
+There are only 11 observations for "Student". Due to the low sample size of the student subset and potential confounding effects (e.g. student tend to have student loans, but also likely to receive parents' financial support other than income), we decide to remove the subset of students and instead focus on the default rate for working people and retirees.
 
 ```{r}
-levels(card.dat$NAME_INCOME_TYPE) <- c("Commercial associate", "Pensioner&Student",
-                                       "State servant", "Pensioner&Student", "Working")
+card.dat <- subset(card.dat, card.dat$NAME_INCOME_TYPE!="Student")
+card.dat$NAME_INCOME_TYPE <- droplevels(card.dat$NAME_INCOME_TYPE)
 ```
 
+### (2) NAME_EDUCATION_TYPE
+
 ```{r}
-# NAME_EDUCATION_TYPE
 table(card.dat$NAME_EDUCATION_TYPE, card.dat$label)
 ```
 
@@ -95,16 +127,21 @@ levels(card.dat$NAME_EDUCATION_TYPE) <- c("Higher education", "Higher education"
                                           "Incomplete higher", "Lower secondary", "Secondary / secondary special")
 ```
 
-```{r}
-# NAME_FAMILY_STATUS
-table(card.dat$NAME_FAMILY_STATUS, card.dat$label)
+### (3) NAME_FAMILY_STATUS
 
-# NAME_HOUSING_TYPE
+```{r}
+table(card.dat$NAME_FAMILY_STATUS, card.dat$label)
+```
+
+### (4) NAME_HOUSING_TYPE
+
+```{r}
 table(card.dat$NAME_HOUSING_TYPE, card.dat$label)
 ```
 
+### (5) OCCUPATION_TYPE
+
 ```{r}
-# OCCUPATION_TYPE
 # Distribution of years of employment for people who do not specify occupation type
 card.dat %>%
   filter(OCCUPATION_TYPE == "") %>%
@@ -121,7 +158,7 @@ For the other levels, we decide to merge them according to the skill levels requ
 
 ```{r}
 card.dat <- card.dat %>%
-  mutate(occupation = as.factor(case_when(
+  mutate(occupation_type = as.factor(case_when(
     # create level unemployed and unknown for occupation type
     OCCUPATION_TYPE=="" & years_employed==0 ~ "Unemployed",
     OCCUPATION_TYPE=="" & years_employed>0 ~ "Unknown",
@@ -132,77 +169,234 @@ card.dat <- card.dat %>%
   )))
 ```
 
-
-## N. WOE
-
-```{r}
-# split data into training and testing
-samplesize <- floor(0.75*nrow(card.dat))
-card.dat$label <- as.numeric(as.factor(card.dat$label)) - 1
-set.seed(1)
-train_ind=sample(seq_len(nrow(card.dat)), samplesize) # 75% rows as training data
-train <- card.dat[train_ind, ]
-test <- card.dat[-train_ind, ]
-```
-
-
-```{r cars}
-IV <- create_infotables(data=train,
-                        valid=test,
-                        y="label",
-                        bins=10)
-
-valid=card.dat[-train,] # testing data ##?
-train <- subset(train, "label"==1)
-valid <- subset(valid, "label"==1)
-options(scipen=10)
-IV <- create_infotables(data=train,
-valid=valid,
-y="label",
-parallel=FALSE)
-
-# "Variable FLAG_MOBIL was removed because it has only 1 unique value"
-
-```
-
-### (1) Including Plots
-
-You can also embed plots, for example:
+# II. Exploratory Analysis
 
 ```{r}
-
-knitr::kable(head(IV$Summary))
-
-#The IV$Tables object returned by Information is simply a list of dataframes that contains the WOE tables for all variables in the input dataset. Note that the penalty and IV columns are cumulative.
-
-knitr::kable(IV$Tables$AMT_INCOME_TOTAL)
+# remove the ID and original variables for age, years_employed and occupation type  
+card.dat.new <- card.dat %>%
+  select(-c(ID, DAYS_BIRTH, DAYS_EMPLOYED, OCCUPATION_TYPE))
 
 ```
+
+# III. Modelling
 
 ```{r}
-
-#Plotting WOE Patterns
-plot_infotables(IV, "AMT_INCOME_TOTAL", show_values=TRUE)
-
+# training and testing dataset
+set.seed(100)
+card.split <- initial_split(card.dat.new, prop=3/4, strata="label") 
+card.train <- training(card.split) 
+card.test <- testing(card.split)
+set.seed(103)
+card.fold <- vfold_cv(card.train, v=5, strata="label")
 ```
 
-```{R}
-plot_infotables(IV, IV$Summary$Variable[1:6], same_scales=TRUE)
+## 1. Logistic Regression
 
-```
+### (1) Baseline - 2 predictors
 
-```{R}
-# Get the names and loop through to create individual plots
-names <- names(IV$Tables)
-plots <- list()
-for (i in 1:length(names)){
-plots[[i]] <- plot_infotables(IV, names[i])
-}
+```{r}
+#age, AMT_INCOME_TOTAL
+glm1 <- glm(label ~ AMT_INCOME_TOTAL, data=card.train, family="binomial")
 
-# Showing the top variables
-
-plots[1:6]
-
+summary(glm1)
+#gradient descent
 ```
 
 
+## 2. Tree-Based Methods
+
+### (1) Decision Tree
+
+```{r Decision Tree}
+# set recipe
+cd.recipe <- training(card.split) %>%   
+  recipe(label ~ .) %>%   
+  prep()
+
+# set tree model, leave tree_depth and cost_complexity for tuning
+cd.tree <- decision_tree(tree_depth = tune(), cost_complexity = tune()) %>%  
+  set_engine("rpart") %>%   
+  set_mode("classification")
+
+# set workflow
+cd.workflow.tree <- workflow() %>%   
+  add_recipe(cd.recipe) %>%   
+  add_model(cd.tree)
+
+# model tuning
+## set tune grid (reference**) auto-generate 5 sensible values for each
+tree.grid <- grid_regular(tree_depth(), cost_complexity(), levels=5)
+set.seed(130)
+## use cross-validation to tune
+cd.fit.tree <- tune_grid(cd.workflow.tree, resamples=card.fold, grid=tree.grid, metrics=metric_set(roc_auc))
+## select the best combination 
+cd.tree.tune.param <- cd.fit.tree %>% select_best()
+## finalise workflow tree
+cd.workflow.tree.final <- finalize_workflow(cd.workflow.tree, cd.tree.tune.param)
+
+# check performance
+## fit final model on training data and evaluate performance on test data
+cd.tree.eval <- cd.workflow.tree.final %>%
+  last_fit(card.split)
+## AUC value for decision tree
+tree.metrics <- cd.tree.eval %>%
+  collect_metrics()
+tree.metrics
+
+# plot ROC 
+## get the probabilities from tree model
+tree.predict <- cd.tree.eval %>% collect_predictions() 
+## prepare an object for ROC curve
+tree.prediction <- prediction(tree.predict$.pred_1, card.test$label)
+tree.roc.obj <- performance(tree.prediction, measure="tpr", x.measure="fpr")
+## plot ROC curve
+plot(tree.roc.obj, main="Decision tree: ROC curve on testing data")
+
+
+# check variables that are important in the tree: (reference**)
+tree.vip <- cd.workflow.tree.final %>%
+  fit(data=card.train) %>% # fit model on training data
+  pull_workflow_fit() %>%
+  vip()
+tree.vip
+
+# confusion matrix
+tree.cm <- cd.tree.eval %>%
+  collect_predictions() %>%
+  select(.pred_class, label) %>%
+  rename(predicted = .pred_class, actual = label) %>%
+  table()
+rownames(tree.cm) <- c("Good", "Bad")
+colnames(tree.cm) <- c("Good", "Bad")
+tree.cm
+```
+[reference: https://www.tidymodels.org/start/tuning/]
+
+### (2) Bagging
+
+```{r cross-validation}
+# set bag model, leave tree_depth and cost_complexity for tuning
+cd.bag <- bag_tree(tree_depth = 8, cost_complexity = tune("C")) %>%  
+  set_engine("rpart", times=5) %>%   
+  set_mode("classification")
+
+# set workflow
+cd.workflow.bag <- workflow() %>%   
+  add_recipe(cd.recipe) %>%   
+  add_model(cd.bag)
+
+# model tuning
+set.seed(280)
+# grid is set after several trials
+cd.fit.bag <- tune_grid(cd.workflow.bag, grid=data.frame(C=2^(-13:-8)), resamples=card.fold, metrics=metric_set(roc_auc))
+
+## select the best combination 
+cd.bag.tune.param <- cd.fit.bag %>% select_best()
+## finalise workflow bag
+cd.workflow.bag.final <- finalize_workflow(cd.workflow.bag, cd.bag.tune.param)
+
+# check performance
+## fit final model on training data and evaluate performance on test data
+cd.bag.eval <- cd.workflow.bag.final %>%
+  last_fit(card.split)
+## AUC value for decision bag
+bag.metrics <- cd.bag.eval %>%
+  collect_metrics()
+bag.metrics
+
+# plot ROC 
+bag.roc <- cd.bag.eval %>% collect_predictions() %>%
+  roc_curve(truth=label, .pred_0) %>%
+  autoplot()
+bag.roc
+
+# check variables that are important
+bag.vip.bagger <- cd.workflow.bag.final %>%
+  fit(data=card.train) %>% # fit model on training data
+  pull_workflow_fit()
+# extract variable importance from _bagger class
+bag.vip <- bag.vip.bagger$fit$imp %>%
+  # user reorder to ensure the descending order of importance
+  ggplot(aes(y=reorder(term, value), x=value)) + geom_col() +
+  ylab("") + xlab("Importance")
+bag.vip
+
+# confusion matrix
+bag.cm <- cd.bag.eval %>%
+  collect_predictions() %>%
+  select(.pred_class, label) %>%
+  rename(predicted_label = .pred_class, actual_label = label) %>%
+  table()
+rownames(bag.cm) <- c("Good", "Bad")
+colnames(bag.cm) <- c("Good", "Bad")
+bag.cm
+```
+
+### (3) Random Forest
+
+```{r}
+# set model, no. of predictor to be selected through cross-validation
+cd.rf <- rand_forest(trees=100, mtry=tune()) %>%
+  set_engine("randomForest") %>%
+  set_mode("classification")
+
+# set random forest workflow
+cd.workflow.rf <- workflow() %>%
+  add_recipe(cd.recipe) %>%
+  add_model(cd.rf)
+
+# tune random forest
+set.seed(500)
+cd.fit.rf <- tune_grid(cd.workflow.rf, resamples=card.fold, metrics=metric_set(roc_auc))
+cd.rf.tune.param <- cd.fit.rf %>% select_best()
+cd.workflow.rf.final <- finalize_workflow(cd.workflow.rf, cd.rf.tune.param)
+
+# fit final model to train data and evaluate on test data
+cd.rf.eval <- cd.workflow.rf.final %>%
+  last_fit(split=card.split)
+
+# AUC value for random forest
+rf.metrics <- cd.rf.eval %>% 
+  collect_metrics()
+rf.metrics
+
+# plot ROC
+rf.roc <- cd.rf.eval %>% 
+  collect_predictions() %>%
+  roc_curve(truth=label, .pred_0) %>%
+  autoplot()
+rf.roc
+
+# important variables 
+rf.vip <- cd.workflow.rf.final %>%
+  fit(data=card.train) %>%
+  pull_workflow_fit() %>%
+  vip()
+rf.vip
+
+# confusion matrix
+rf.cm <- cd.rf.eval %>%
+  collect_predictions() %>%
+  select(.pred_class, label) %>%
+  rename(predicted_label = .pred_class, actual_label = label) %>%
+  table()
+rownames(rf.cm) <- c("Good", "Bad")
+colnames(rf.cm) <- c("Good", "Bad")
+rf.cm
+```
+
+### (4) Tree: Summary
+
+```{r Evaluation of all tree methods}
+# combine accuracy values for three methods
+accuracy_sum <- list(tree.metrics[1,], bag.metrics[1,], rf.metrics[1,]) %>%
+  map_dfr(bind_rows) %>%
+  select(accuracy=.estimate)
+# combine AUC values for three methods
+auc_sum <- list(tree.metrics[2,], bag.metrics[2,], rf.metrics[2,]) %>%
+  map_dfr(bind_rows) %>%
+  select(AUC=.estimate)
+# display performance metrics of all three methods
+all_tree_metrics <- cbind(method=c("Tree", "Bagging", "Random Forest"), auc_sum, accuracy_sum)
+all_tree_metrics
+```
