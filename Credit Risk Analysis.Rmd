@@ -1,6 +1,6 @@
 ---
 title: "Evaluation of Credit Analysis Models"
-author: "Josiah Suartono, Yiwei Yin, Jiahui Liu"
+author: "Josiah Suartono, Patricia Yin, Jiahui Liu"
 date: "07/04/2021"
 output:
   html_document:
@@ -1202,6 +1202,7 @@ rownames(tab) <- c("Computational speed","Interpretability" ,"Predictive accurac
 tab <- as.table(tab)
 tab
 ```
+
 (Random Forest Vs. Stepwise) However, is the lost in interpretability worth it for the gain in predictive accuracy? There is indeed a noticeable amount of increase in auc, while the interpretability is completely lost as it is a black box. In the end, Banks would like to utilize this machine learning model as a guide to better decision making and have higher certainty in whether an applicant will repay its debt. Interpretability is a necessity, as the general public, perhaps more importantly the regulatory, must be able to completely understand the underlying algorithms. Therefore Random Forest might not be suitable for this specific task.
  
 (Radial SVMs Vs. Step-wise) As a high-dimensional model,the high auc is an implication that there are some underlying nonlinear high-dimensional relationships. The benefit of using Radial Kernel SVM is that the interpretability is preserved. The hyperplane which separates the good and bad accounts can be written down exactly, providing a neat representation of how each new account will be quantified for a decision, which have the benefit of displaying to the regulatories how the underlying algorithms work.
