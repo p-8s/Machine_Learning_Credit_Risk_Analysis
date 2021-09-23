@@ -29,17 +29,12 @@ library(ggrepel)
 library(MASS)
 ```
 
-# Introduction:
+# I. Introduction:
 
-Understanding the risk of default when assessing whether an applicant should be given a credit card is crucial for banks to avoid insolvency. If the borrower presents an acceptable level of default risk, the analyst can recommend the approval of the credit application at the agreed terms. The outcome of the credit risk analysis determines the risk rating that the borrower will be assigned and their ability to access credit. Our goal is to build a classification model to predict the type of credit card users in China based on their application information. Hence, we face a supervised learning situation and should use a classification model to predict the categorical outcomes. Furthermore, we use the AUC(area under the curve) as a performance measure for our classification problem. This project aims to compare different machine learning models against the stepwise logistic regression, which is the common industrial practice for such a task. (reference)  
+Understanding the risk of default when assessing whether an applicant should be given a credit card is crucial for banks to avoid insolvency. If the borrower presents an acceptable level of default risk, the analyst can recommend the approval of the credit application at the agreed terms [1]. The outcome of the credit risk analysis determines the risk rating that the borrower will be assigned and their ability to access credit. Our goal is to build a classification model to predict the type of credit card users in China based on their application information. Hence, we face a supervised learning situation and should use a classification model to predict the categorical outcomes. Furthermore, we use the AUC (area under the curve) as a performance measure for our classification problem. This project aims to compare different machine learning models against the stepwise logistic regression, which is the common industrial practice for such a task.
 
-The data is from an anonymous Chinese bank, which was published on Kaggle (reference). The same data set can also be found as teaching materials in a "credit card applicant's rating model building tutorial" in the link below (reference). Chinese banks will mark the debts which are overdue for more than 90 days as bad debt, and be entering legal proceeding if overdue was more than 180 days. Hence for performance measuring reasons, the study is focused on clients who already have a credit record of more than 3 months.
+The data is from an anonymous Chinese bank, which was published on Kaggle [2]. The same data set can also be found as teaching materials in a "credit card applicant's rating model building tutorial" in the link below [3]. Chinese banks will mark the debts which are overdue for more than 90 days as bad debt, and be entering legal proceeding if overdue was more than 180 days. Hence for performance measuring reasons, the study is focused on clients who already have a credit record of more than 3 months.
 
-[reference: https://www.sciencedirect.com/science/article/abs/pii/S0167923613002625]
-
-[reference: https://mp.weixin.qq.com/s/upjzuPg5AMIDsGxlpqnoCg]
-
-[reference: https://www.kaggle.com/rikdifos/credit-card-approval-prediction] 
 
 ## Data Dictionary:
 
@@ -62,7 +57,7 @@ The data is from an anonymous Chinese bank, which was published on Kaggle (refer
 - OCCUPATION_TYPE: Occupation	
 - CNT_FAM_MEMBERS: Family size
 
-# I. Data Pre-processing
+# II. Data Pre-processing
 
 To get a first impression of both the data we take a look at the top 4 rows:
 
@@ -91,7 +86,7 @@ Having glimpsed the two data sets, we decide to firstly create the response vari
 
 ## 1. Response Variable
 
-In this study, we will treat accounts 90 days past due as a “bad” account (label=1) following the standard practice of Chinese banks.
+In this study, we treat accounts 90 days past due as a “bad” account (label=1) following the standard practice of Chinese banks.
 
 ```{r response variable}
 # remove those account with insufficient history (less than 3 months)
@@ -174,8 +169,6 @@ famcnt.p <- ggplot(famcnt.df.b) + geom_col(aes(x=Var1, y=100*Freq)) +
 famcnt.p
 ```
 
-In order to avoid a level completely dominates by the "good" account, we decided to combine family count of more than 5.
-
 ```{r}
 card.dat$CNT_FAM_MEMBERS[card.dat$CNT_FAM_MEMBERS >= 5] <- "5+"
 card.dat$CNT_FAM_MEMBERS[card.dat$CNT_FAM_MEMBERS == 4] <- "4"
@@ -216,7 +209,7 @@ card.dat <- card.dat %>% dplyr::select(-FLAG_MOBIL)
 table(card.dat$NAME_INCOME_TYPE, card.dat$label)
 ```
 
-There are only 11 observations for "Student", with no label as "1"(default). Due to the low sample size of the student subset and potential confounding effects (e.g. student tend to have student loans, but also likely to receive parents' financial support other than income), we decide to remove the subset of students and instead focus on the default rate for working people and retirees.
+There are only 11 observations for "Student", none of which are label as "1"(default). Due to the low sample size of the student subset and potential confounding effects (e.g. student tend to have student loans, but also likely to receive financial support from parents other than income), we decide to remove the subset of students and instead focus on the default rate for working people and retirees.
 
 ```{r NAME_INCOME_TYPE}
 card.dat <- subset(card.dat, card.dat$NAME_INCOME_TYPE!="Student")
@@ -229,7 +222,7 @@ card.dat$NAME_INCOME_TYPE <- droplevels(card.dat$NAME_INCOME_TYPE)
 table(card.dat$NAME_EDUCATION_TYPE, card.dat$label)
 ```
 
-There are only 31 observations for "Academic degree". We decided to merge this level with "Higher education" because they indicated an educational level higher than secondary education.
+There are only 31 observations for "Academic degree". We decided to merge this level with "Higher education" because they both indicate post secondary education.
 
 ```{r NAME_EDUCATION_TYPE}
 levels(card.dat$NAME_EDUCATION_TYPE) <- c("Higher education","Higher education",
@@ -279,7 +272,7 @@ card.dat <- card.dat %>%
   )))
 ```
 
-# II. Exploratory Analysis
+# III. Exploratory Analysis
 
 ## Prepare dataset
 
@@ -316,7 +309,7 @@ $\text{Accuracy}=\frac{TP + TN}{TP + TN + FP + FN}$
 
 The traditional technique to deal with this problem is to artificially create a balanced data set, by using a combination of over-sampling, such as Variational Autoencoders (VAE), Synthetic Minority Oversampling Technique (SMOTE), and other under-sampling techniques. However, we decided to tackle this problem by using a different performance metric, the Area Under the Curve (AUC), due to its insensitivity to the class imbalance. 
 
-The "Curve" refers to the ROC which plots false positive rate Vs. true positive rate at different probability threshold. In particular:
+The "Curve" refers to the ROC which plots false positive rate versus true positive rate at different probability threshold. In particular:
 
 $\text{false positive rate} = \frac{FP}{FP + TN}$
 
@@ -344,16 +337,14 @@ $\text{WOE}_i = \log{(\frac{Dist(Good)_i}{Dist(Bad)_i})}$
 
 $\text{IV}_i = \sum_i{(WOE_i*(Dist(Majority)_i-Dist(Minority)_i)}$
 
-- WOE: Weight of Evidence
 
-Based on this table, we see that years_employed holds the highest predictive power among all variables. From the graph below we could see that people who are identified as "bad" (label=1) tend to associate with shorter employment history. This is not surprising as this group tends to have a less stable income, affecting their ability to repay credit card debts on time.
 
 ```{r}
 # years_employed and label
 ggplot(data=card.dat.new, aes(y=years_employed, x=label)) + geom_boxplot()
 ```
 
-NAME_FAMILY_STATUS is the variable with the second-highest predictive power according to its NIV. Indeed, people with different family statuses tend to associate with different likelihoods of defaulting. 
+Based on this table, we see that years_employed holds the highest predictive power among all variables. From the graph below we could see that people who are identified as "bad" (label=1) tend to associate with shorter employment history. This is not surprising as this group tends to have a less stable income, affecting their ability to repay credit card debts on time.
 
 ```{r}
 # calculate the percentage of "good/bad" in each level 
@@ -369,11 +360,16 @@ fam.p <- ggplot(fam.df.b) +
 fam.p
 ```
 
+NAME_FAMILY_STATUS is the variable with the second-highest predictive power according to its NIV. Indeed, people with different family statuses tend to associate with different likelihoods of defaulting. 
+
 \newpage
-# III. Modeling
-Local regression can perform poorly if p is much larger than about 3 or 4 because there will generally be very few training observations close to x0. Nearest-neighbors regression, suffers from a similar problem in high dimensions. Because our data contains 15 predictor variables, we decide not to use local regression (e.g. loess) or Nearest-neighbors method to avoid this problem.
+
+# IV. Modeling
+
+Local regression can perform poorly if the number of predictors is large because there are generally  few training samples close to an observation in a high dimension. Nearest-neighbors regression suffers from a similar problem. Because our data contains 15 predictor variables, we decide not to use local regression (e.g. loess) or nearest-neighbors method.
  
-Instead, we decide to use logistic regression, SVM, and tree methods to make predictions. Because the logistic model is additive, we can still examine the effect of each Xj on Y individually while holding all of the other variables fixed. Hence if we are interested in inference, GAMS provides useful interpretation. Therefore, we would like to apply gradient descent to logistic regression as our baseline model.
+Instead, we decide to use logistic regression, SVM, and tree methods to make predictions. 
+
 
 ```{r}
 # split training and testing dataset
@@ -385,7 +381,7 @@ set.seed(103)
 card.fold <- vfold_cv(card.train, v=5, strata="label")
 ```
 
-Using the strata argument to make sure that the proportion of the response variable "label"=1 will be similar to that of the original data set, especially when we  have imbalanced data here
+Using the strata argument, we want to make sure that the proportion of the response variable label=1 will be similar to that of the original data set. This is crucial as our response variable is highly imbalanced.
 
 ## 1. Logistic Regression
 
@@ -414,32 +410,25 @@ VIF stands for Variance Inflation Factor, and it is calculated as:
 
 $\text{VIF}_i=\frac{1}{1-R_i^2}$
 
-Where:
 Ri: Unadjusted coefficient for determination for regressing the ith independent variable on the remaining ones
 
 As a reference, VIF higher than 10 have significant multicollinearity that needs to be corrected; VIF higher than 5 might indicate multicollinearity exist.
 
-Seeing the results of VIF above, income type and occupation type seem to have multicollinearity problem, we remove income type to see whether the problem can be solved.
+Seeing the results of VIF above, income type and occupation type seem to have multicollinearity problem, we decided to remove income type from the belief that occupation type conveys more meaningful and interpretable information.
 
 ```{r}
 full_model <- glm(label ~.-NAME_INCOME_TYPE, data=new.train, family=binomial)
 vif(full_model)
 ```
 
-The problem is solved as no vif value is larger than 5 now
-
 We will now use Youden-Index to determine the best cut-off point
-
-#### Youden-Index: Detemine the point for which (sensitifity + specificity) is maximal.
-- correctly classified as "positive" = true-positive-rate = sensitivity
-- correctly classified as "negative" = true-negative-rate = specificity
 
 ```{r}
 # Make predictions for validation data 
 full.probabilities.test <- full_model %>% predict(validation, type="response")
 
 set.seed(1)
-#find the best cut-off point using the validation data (reference)(reference*)
+#find the best cut-off point using the validation data [4]
 card.test.cp <- data.frame(validation, full.probabilities.test)
 cp <- cutpointr(card.test.cp,full.probabilities.test,label,
                 metric = sum_sens_spec,
@@ -447,10 +436,6 @@ cp <- cutpointr(card.test.cp,full.probabilities.test,label,
 summary(cp)
 plot(cp)
 ```
-
-[reference: https://cran.r-project.org/web/packages/cutpointr/vignettes/cutpointr.html]
-
-[reference*: https://www.researchgate.net/post/How-do-I-calculate-the-best-cutoff-for-ROC-curves]
 
 The optimal cut-point is found where is the point where sensitivity + specificity is maximized. Hence hereafter we will use this threshold to evaluate all predicted probabilities.
 
@@ -480,15 +465,15 @@ plot(full.roc.obj, main="Full model: ROC on testing data")
 full.log.auc <- performance(full.prediction, measure = "auc")@y.values
 full.log.auc
 ```
+
 A logistic model with almost all predictors is not good, as this includes many insignificant variables that could inhibit the result. Hence we now consider our baseline model with 2 predictors.
 
 ### (1) Baseline - 2 predictors
 
-As a baseline model, we decided to build a logistic regression with two predictors, years_employed and CODE_GENDER. The two predictors were picked based on domain knowledge: people with longer employment history tend to be less reliant on credit cards for expenses, therefore less likely to overdraft and have loan overdue. Also, several research papers have shown that women tend to be more credit conscious [reference**]. 
+As a baseline model, we decided to build a logistic regression with two predictors, years_employed and CODE_GENDER. The two predictors were picked based on domain knowledge: people with longer employment history tend to be less reliant on credit cards for expenses, therefore less likely to overdraft and have loan overdue. Also, several research papers have shown that women tend to be more credit conscious [5]. 
 
-We build this baseline regression model using gradient descent. 
+We build this baseline regression model using gradient descent [6]. 
 
-[reference** : https://economictimes.indiatimes.com/industry/banking/finance/women-getting-more-credit-conscious-also-default-less-than-men-credit-bureaus/articleshow/74516703.cms?from=mdr]
 
 ```{r Gradient Descent}
 # since gender only has two levels, we recode it to be a numeric variable 
@@ -538,8 +523,6 @@ beta_f <- grd_descent(X, Y, beta, 0.001)
 beta_f
 ```
 
-[referecne **]: ISLR Chapter 4.3
-
 In ordert to verify the correctness of our implementation of gradient descent, we then run the glm function to compare the results.
 
 ```{r}
@@ -558,6 +541,7 @@ $ln(\widehat{odds_{female}}) = -5.0697 + 0.3528 * 2 - 0.02957 * years\_employed$
 $ln(\widehat{odds_{male}}) = -5.0697 + 0.3528 * 1 - 0.02957 * years\_employed$
 
                           $= -4.7169 - 0.02957 * years\_employed$                            
+
 In this model, we observe that if years_employed increases by 1 unit, odds of being "bad" changes by a factor of $ e^{-0.02957} \approx 0.9708 $, which is 3% decrease. As compared to men, women's odds of being "bad" increases by $( e^{0.3528} - 1) * 100\% = 42.3\%$. 
 
 To understand the probability, we assume the following two examples:
@@ -599,7 +583,7 @@ glm2.auc
 
 ### (2) Best subset regression
 
-Because we are interested in models with low test error, training set RSS and R^2 cannot be used to select from among a set of models with different number of variables. Because we are using maximized log-likelihood when running logistic regression, we use AIC as cross-validation criterion
+Because we are interested in models with low test error, training set $RSS$ and $R^2$ cannot be used to select from among a set of models with different number of variables. Because we are using maximized log-likelihood when running logistic regression, we use AIC as cross-validation criterion
 
 ```{r}
 #perform all-subset logistic regression based on Akaike Information Criteria (AIC)
@@ -706,14 +690,14 @@ Unlike best subset, forward stepwise, and backward stepwise selection, which wil
 
 This may not be a problem for prediction accuracy, but it can create a challenge in model interpretation in settings in which the number of variables p is quite large. In the Credit data set, it appears that the most important variables are GENDER and FLAG_OWN_CAR in previous best subset analysis. So we might wish to build a model including just these predictors. 
 
-However, ridge regression will always generate a model involving all ten predictors. Increasing the value of λ will tend to reduce the magnitudes of the coefficients, but will not result in exclusion of any of the variables. Hence, we conducted the lasso as a alternative to ridge regression that overcomes this disadvantage by using l1 penalty (penalizing the sum of absolute values of the coefficients).
+However, ridge regression will always generate a model involving all ten predictors. Increasing the value of $\lambda$ will tend to reduce the magnitudes of the coefficients, but will not result in exclusion of any of the variables. Hence, we conducted the lasso as a alternative to ridge regression that overcomes this disadvantage by using l1 penalty (penalizing the sum of absolute values of the coefficients).
 
 
 ### (4) Lasso regression
 
 Lasso regression puts constraints on the size of the coefficients associated to each variable. However, this value will depend on the magnitude of each variable. It is therefore necessary to standardize the variables to improve interpretability of coefficients. Also, it grants us the ability to rank the coefficient importance by the relative magnitude of post-shrinkage coefficient estimates. The result of centering the variables means that there is no longer an intercept.
 
-In lasso, as λ increases, As the model is becoming more and more flexible the test RSS will reduce first and then start increasing when overfitting will start. Variance steadily increase with the increase in model flexibility. Therefore, we would like to use cross-validation on training data to find the lambda that minimizes prediction error on the during cross-validation.
+In lasso, as $\lambda$ increases, As the model is becoming more and more flexible the test RSS will reduce first and then start increasing when overfitting will start. Variance steadily increase with the increase in model flexibility. Therefore, we would like to use cross-validation on training data to find the lambda that minimizes prediction error on the during cross-validation.
 
 
 ```{r}
@@ -721,7 +705,7 @@ set.seed(1234)
 #bind the train and test data in order for creating matrix later
 traintest=rbind(card.train,card.test)
 
-#remove label from predicting variables [reference **]
+#remove label from predicting variables [7]
 X = sparse.model.matrix(label~.-label, 
                         data = traintest)
 
@@ -736,22 +720,23 @@ final_cv =
 # Plot cross-validation error according to the log of lambda
 plot(final_cv)
 ```
-The plot displays the cross-validation error according to the log of lambda. The left dashed vertical line indicates that the log of the optimal value of log(lambda) is approximately -11, which is the one that minimizes the prediction error. This lambda value will give the most accurate model. The exact value of lambda can be viewed as follow:
+
+The plot displays the cross-validation error according to the log of lambda. The left dashed vertical line indicates that the log of the optimal value of $log(\lambda)$ is approximately -11, which is the one that minimizes the prediction error. This lambda value will give the most accurate model. The exact value of $\lambda$ can be viewed as follow:
+
 ```{r}
 final_cv$lambda.min
 
 #predict on test set
-lasso.pred = predict(final_cv, s='lambda.min',#
+lasso.pred = predict(final_cv, s='lambda.min',
                      newx=X[-(1:nrow(card.train)),],
                      type="response")
 
 #Model confusion matrix
-lasso.pred.class <- as.factor(ifelse(lasso.pred >  cpopt, 1, 0))
+lasso.pred.class <- as.factor(ifelse(lasso.pred > cpopt, 1, 0))
 lasso.cm <- confusionMatrix(lasso.pred.class,card.test$label)
 lasso.cm[["table"]]
 ```
 
-[reference **] https://stackoverflow.com/questions/29015282/predict-function-error-for-probabilities-in-glmnet
 
 ```{r}
 # plot ROC
@@ -771,32 +756,32 @@ plot(final_cv$glmnet.fit, xvar = "lambda")
 legend("bottomright", lwd = 1, col = 1:6, legend = colnames(X), cex = .19)
 ##Using lambda.min as the best lambda, regression coefficients as follows:
 ```
+
 We observe that at first, the lasso results in a model that contains only the GENDER predictor. Then FLAG_OWN_CAR and FLAG_OWN_REALTY enter the model almost simultaneously, shortly followed by AMT_INCOME_TOTAL. Eventually, the remaining variables enter the model.
 
 ```{r}
 coef(final_cv)
 ```
+
 The lasso regression did not set any variable to zero, except for several levels within categorical variables. This makes sense as it justifies the tedious procedure for banks to collect applicants' comprehensive information before issuing them credit cards.
 
 Within housing type where some levels are set to zero,we can infer that features like living in the municipal apartment will increase risk of defaulting. One possibility might be that municipal apartment are affordable housing provided by the government, so residents may have relatively low income stability and thus higher risk of incurring bad debt. Holding all else equal, banks should pay special attention to such applicants compared to residents in else where.
 
-Variable importance for regularized models provides a similar interpretation as in logistic regression. Importance is determined by magnitude of the standardized coefficients.
-[reference: https://bradleyboehmke.github.io/HOML/regularized-regression.html#lm-features]
+Variable importance for regularized models provides a similar interpretation as in logistic regression. Importance is determined by magnitude of the standardized coefficients [8].
+
 ```{r}
 #Top 20 most important variables for the optimal regularized regression model.
 vip(final_cv, num_features = 20, geom = "point")
 ```
 
-The relationship between the features and response is monotonic linear. For relationships that are positive in nature (e.g.age), as the values in these features increase the average predicted probalibity of defaulting.For relationships that are negative in nature (e.g. years employed), as the values in these features increase the average predicted probalibity of defaulting.
+The relationship between the features and response is monotonic linear. For relationships that are positive in nature (e.g. age), as the values in these features increase the average predicted probalibity of defaulting.For relationships that are negative in nature (e.g. years employed), as the values in these features increase the average predicted probalibity of defaulting.
 
 \newpage
 
 
 ## 2. Support Vector Machine
 
-After logistic regression models, we move on to explore SVM with the radial kernel (Runtime: 1 hr) (Reference)
-
-[Reference: https://www.tidymodels.org/learn/work/tune-svm/]
+After logistic regression models, we move on to explore SVM with the radial kernel (Runtime: 1 hr) [9]
 
 Dropping the normality assumption, we now use a more algorithmic approach to the model. Kernel SVM find a hyperplane in the embedded feature space that separates the two class in the response variable, with error margin constrained by the cost.
 
@@ -950,20 +935,16 @@ Based on the tree model, we see that years_employed is a crucial indicator on wh
 
 The second split takes place at AMT_INCOME_TOTAL. When the value is greater than 13, an individual is classified as "good". This is understandable as an individual with little income may have less capability to repay credit card loans. 
 
-Other variables used in the tree include NAME_FAMILY_STATUS, FLAG_WORK_PHONE, NAME_HOUSING_TYPE, CODE_GENDER, NAME_EDUCATION_TYPE, CNT_FAMILY_MEMBERS, and age. We use variable importance to measure the contribution of variables to the model. This value is calculated as the sum of the error decrease when split the tree by a variable (reference).
-
-[reference: https://dzone.com/articles/variable-importance-and-how-it-is-calculated]
+Other variables used in the tree include NAME_FAMILY_STATUS, FLAG_WORK_PHONE, NAME_HOUSING_TYPE, CODE_GENDER, NAME_EDUCATION_TYPE, CNT_FAMILY_MEMBERS, and age. We use variable importance to measure the contribution of variables to the model. This value is calculated as the sum of the error decrease when split the tree by a variable [10].
 
 ```{r}
-# check variables that are important in the tree: [reference]
+# check variables that are important in the tree: [11]
 tree.vip <- cd.workflow.tree.final %>%
   fit(data=card.train) %>% # fit model on training data
   pull_workflow_fit() %>%
   vip()
 tree.vip
 ```
-
-[reference: https://www.tidymodels.org/start/tuning/]
 
 We could see that age makes the most contribution to the decision tree model followed by years_employed. 
 
@@ -1188,11 +1169,9 @@ The random forest model has the highest AUC value out of the three tree models i
 
 ## 4. Model Comparison
 
-Given our data, Random Forest has the highest auc, beating the industrial standard practice, stepwise logistic regression, and Radial SVM and Lasso logistic regression coming in between.
+Given our data, random forest has the highest AUC, beating the industrial standard practice, stepwise logistic regression, and radial SVM and Lasso logistic regression coming in between.
 
 We would like to evaluate the models against the stepwise logistic regression (banks' practice) according to model complexity (computational time), predictive accuracy, and interpretability.
-
-
 
 ```{r}
 tab <- matrix(c("Slow- especially for large banks with more user data","Medium ","Fast","Medium- linear SVM is more interpretable than radial kernel SVM","Poor-black box, not suitable for banks to be compliant","Good- classic logit model, which is suitable for banks to interpret based on individual information collected","High","Very high","Moderately high","Poor- kernel includes all features","Good","Moderately good","Moderately-change categorical levels to several dummy variables","Extremely","Moderately-change categorical levels to several dummy variables","No","No","Yes","Extremely Good- only depend on borderline data","Good","Poor- may be affected by high leverage points or outliers, but not so much given the banks’ applicant number is tremendous"), ncol=3, byrow=TRUE)
@@ -1203,19 +1182,48 @@ tab <- as.table(tab)
 tab
 ```
 
-(Random Forest Vs. Stepwise) However, is the lost in interpretability worth it for the gain in predictive accuracy? There is indeed a noticeable amount of increase in auc, while the interpretability is completely lost as it is a black box. In the end, Banks would like to utilize this machine learning model as a guide to better decision making and have higher certainty in whether an applicant will repay its debt. Interpretability is a necessity, as the general public, perhaps more importantly the regulatory, must be able to completely understand the underlying algorithms. Therefore Random Forest might not be suitable for this specific task.
+### Random Forest Vs. Stepwise 
+
+However, is the lost in interpretability worth it for the gain in predictive accuracy? There is indeed a noticeable amount of increase in auc, while the interpretability is completely lost as it is a black box. In the end, Banks would like to utilize this machine learning model as a guide to better decision making and have higher certainty in whether an applicant will repay its debt. Interpretability is a necessity, as the general public, perhaps more importantly the regulatory, must be able to completely understand the underlying algorithms. Therefore Random Forest might not be suitable for this specific task.
  
-(Radial SVMs Vs. Step-wise) As a high-dimensional model,the high auc is an implication that there are some underlying nonlinear high-dimensional relationships. The benefit of using Radial Kernel SVM is that the interpretability is preserved. The hyperplane which separates the good and bad accounts can be written down exactly, providing a neat representation of how each new account will be quantified for a decision, which have the benefit of displaying to the regulatories how the underlying algorithms work.
+### Radial SVMs Vs. Step-wise
+
+As a high-dimensional model,the high auc is an implication that there are some underlying nonlinear high-dimensional relationships. The benefit of using Radial Kernel SVM is that the interpretability is preserved. The hyperplane which separates the good and bad accounts can be written down exactly, providing a neat representation of how each new account will be quantified for a decision, which have the benefit of displaying to the regulatories how the underlying algorithms work.
 
 Compared with logistic regression in general, SVMs use hinge loss as opposed to the log loss used in the logistic regression. Theoretically, this creates "sparsity" in the sense that not all observations are influential in classifying a data point, in other words, it is local at boundary. This is a benefit as most of the time in credit analysis, class imbalance persists. Having more local methods will mean that "bad" accounts are being treated more closely than a global model.
 
 However, the training time for a model grows exponentially fast with sample size. For example, in our example of 26203 training observations, the model ran for an hour for it to complete training. For a leading Chinese bank, it has around 700 million credit card users in total just as of last year. The time it would take for the model to finish training could hinder the applicability of the model. Therefore is it not clear whether SVMs will be better than stepwise logistic regression.
 
-(Lasso Vs. Step-wise) It can be seen that the Lasso model predicts the highest AUC across all the logistic models, including stepwise logistic regression. This was expected as the minimum MSE on test set using cross-validation was found for Lasso model across all the models
+### Lasso Vs. Step-wise 
+
+It can be seen that the Lasso model predicts the highest AUC across all the logistic models, including stepwise logistic regression. This was expected as the minimum MSE on test set using cross-validation was found for Lasso model across all the models
  
 The chosen model in lasso contains almost all the 15 predictor variables. The weightage of each predictor variable for every component is given by scores, with gender and car ownership given the highest score. This suggests that all the predictor variables are contributing in predicting the response variable, which makes sense for the procedure of information collection and validation for credit card application.
 
 As a conclusion, while the more sophisticated models have a higher predictive accuracy, we believe that interpretability of the model should still remain for the credit analyst and also whoever would need to review the result to be able to understand exactly why the model gives an output. Hence, SVMs and Tree methods failed to suffice this criteria, while Lasso serves as a reasonable alternative to the existing stepwise models. 
 
+# References
+
+[1. https://www.sciencedirect.com/science/article/abs/pii/S0167923613002625]
+
+[2. https://mp.weixin.qq.com/s/upjzuPg5AMIDsGxlpqnoCg]
+
+[3. https://www.kaggle.com/rikdifos/credit-card-approval-prediction] 
+
+[4. https://www.researchgate.net/post/How-do-I-calculate-the-best-cutoff-for-ROC-curves]
+
+[5. https://economictimes.indiatimes.com/industry/banking/finance/women-getting-more-credit-conscious-also-default-less-than-men-credit-bureaus/articleshow/74516703.cms?from=mdr]
+
+[6. ISLR Chapter 4.3]
+
+[7. https://stackoverflow.com/questions/29015282/predict-function-error-for-probabilities-in-glmnet]
+
+[8. https://bradleyboehmke.github.io/HOML/regularized-regression.html]
+  
+[9. https://www.tidymodels.org/learn/work/tune-svm/]
+
+[10. https://dzone.com/articles/variable-importance-and-how-it-is-calculated]
+
+[11. https://www.tidymodels.org/start/tuning/]
 
 
